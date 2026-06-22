@@ -60,7 +60,7 @@ export default function Globe({ startYear, endYear, onNodeClick, onMapClick, pin
                 const { west, south, east, north } = bbox;
                 
                 return new BitmapLayer(props, {
-                    data: null, 
+                    data: undefined, 
                     image: props.data,
                     bounds: [west, south, east, north]
                 });
@@ -79,7 +79,7 @@ export default function Globe({ startYear, endYear, onNodeClick, onMapClick, pin
                 const { west, south, east, north } = bbox;
                 
                 return new BitmapLayer(props, {
-                    data: null,
+                    data: undefined,
                     image: props.data,
                     bounds: [west, south, east, north],
                     transparentColor: [0, 0, 0, 0] // Ensure transparency works for labels
