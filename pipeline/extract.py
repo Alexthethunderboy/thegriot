@@ -63,10 +63,25 @@ def extract_entities_from_text(text: str) -> Dict[str, Any]:
         print("Failed to parse Gemini output:", e)
         return {}
 
+def generate_embedding(text: str) -> List[float]:
+    """Generates a 768-dimensional text embedding using Gemini."""
+    if not API_KEY:
+        return [0.0] * 768
+    try:
+        result = genai.embed_content(
+            model="models/text-embedding-004",
+            content=text,
+            task_type="retrieval_document"
+        )
+        return result['embedding']
+    except Exception as e:
+        print("Failed to generate embedding:", e)
+        return [0.0] * 768
+
 def resolve_and_insert(extracted_data: Dict[str, Any], source_id: str):
     """
     Connects to Supabase, deduplicates entities, generates embeddings, 
-    and inserts records into the knowledge graph.
+    and inserts records into the temporal knowledge graph (clusters, epochs, entities).
     """
     if not DB_CONNECTION_STRING:
         print("Warning: SUPABASE_DB_URL not set. Skipping DB insert.")
@@ -76,64 +91,97 @@ def resolve_and_insert(extracted_data: Dict[str, Any], source_id: str):
         conn = psycopg2.connect(DB_CONNECTION_STRING)
         cursor = conn.cursor()
         
-        # 1. Deduplicate & Insert Nodes
         entity_id_map = {}
         for entity in extracted_data.get("entities", []):
             name = entity["name"]
             e_type = entity["entity_type"]
             lat, lon = entity.get("location_approx", [0.0, 0.0])
             
-            # Simple deduplication: Check if entity with same name exists
-            cursor.execute("SELECT id FROM nodes WHERE name = %s LIMIT 1", (name,))
-            result = cursor.fetchone()
-            
-            if result:
-                node_id = result[0]
+            # 1. Cluster resolution (find within 50km or create)
+            cursor.execute("""
+                SELECT id FROM clusters 
+                WHERE ST_DWithin(coordinates::geography, ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography, 50000)
+                LIMIT 1
+            """, (lon, lat))
+            cluster_res = cursor.fetchone()
+            if cluster_res:
+                cluster_id = cluster_res[0]
             else:
-                # Need to generate embedding via Vertex/Gemini in real app.
-                # Here we insert just the geographic info and base metadata.
-                # location is GEOMETRY(Point, 4326) -> ST_SetSRID(ST_MakePoint(lon, lat), 4326)
                 cursor.execute("""
-                    INSERT INTO nodes (name, entity_type, location, metadata)
-                    VALUES (%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s)
+                    INSERT INTO clusters (current_name, coordinates)
+                    VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
                     RETURNING id
-                """, (name, e_type, lon, lat, json.dumps(entity.get("metadata", {}))))
-                node_id = cursor.fetchone()[0]
-                
-            entity_id_map[name] = node_id
+                """, (f"Region of {name}", lon, lat))
+                cluster_id = cursor.fetchone()[0]
 
-        # 2. Insert Claims
+            # 2. Epoch resolution (default to 3: Modern for simplicity, or 2 if historical)
+            # A full implementation would parse years from claims, but we use a default here
+            epoch_level = 2 
+            cursor.execute("SELECT id FROM epochs WHERE cluster_id = %s AND epoch_level = %s", (cluster_id, epoch_level))
+            epoch_res = cursor.fetchone()
+            if epoch_res:
+                epoch_id = epoch_res[0]
+            else:
+                cursor.execute("""
+                    INSERT INTO epochs (cluster_id, epoch_level) VALUES (%s, %s) RETURNING id
+                """, (cluster_id, epoch_level))
+                epoch_id = cursor.fetchone()[0]
+
+            # 3. Entity Semantic deduplication
+            embedding_text = f"{name} ({e_type})"
+            embedding = generate_embedding(embedding_text)
+            embedding_str = "[" + ",".join(map(str, embedding)) + "]"
+            
+            cursor.execute("""
+                SELECT id FROM entities 
+                WHERE embedding IS NOT NULL 
+                  AND 1 - (embedding <=> %s::vector) > 0.85 
+                ORDER BY embedding <=> %s::vector 
+                LIMIT 1
+            """, (embedding_str, embedding_str))
+            
+            result = cursor.fetchone()
+            if result:
+                entity_id = result[0]
+                print(f"Matched {name} semantically to existing entity {entity_id}")
+            else:
+                cursor.execute("""
+                    INSERT INTO entities (epoch_id, name, entity_type, embedding, metadata)
+                    VALUES (%s, %s, %s, %s::vector, %s)
+                    RETURNING id
+                """, (epoch_id, name, e_type, embedding_str, json.dumps(entity.get("metadata", {}))))
+                entity_id = cursor.fetchone()[0]
+                
+            entity_id_map[name] = entity_id
+
+        # 4. Insert Claims
         for claim in extracted_data.get("claims", []):
             e_name = claim.get("entity_name")
             if e_name in entity_id_map:
                 cursor.execute("""
-                    INSERT INTO claims (node_id, source_id, claim_text, start_year, end_year, confidence_score, is_contested)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO claims (entity_id, source_id, claim_text, confidence_score, is_contested)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, (
                     entity_id_map[e_name], 
                     source_id, 
                     claim.get("claim_text"),
-                    claim.get("start_year"),
-                    claim.get("end_year"),
                     claim.get("confidence_score", 0.5),
                     claim.get("is_contested", False)
                 ))
 
-        # 3. Insert Edges (Relationships)
+        # 5. Insert Edges (Relationships)
         for rel in extracted_data.get("relationships", []):
             src_name = rel.get("source_name")
             tgt_name = rel.get("target_name")
             if src_name in entity_id_map and tgt_name in entity_id_map:
                 cursor.execute("""
-                    INSERT INTO edges (source_node_id, target_node_id, relationship_type, description, start_year, end_year)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO edges (source_entity_id, target_entity_id, relationship_type, description)
+                    VALUES (%s, %s, %s, %s)
                 """, (
                     entity_id_map[src_name],
                     entity_id_map[tgt_name],
                     rel.get("relationship_type"),
-                    rel.get("description"),
-                    rel.get("start_year"),
-                    rel.get("end_year")
+                    rel.get("description")
                 ))
 
         conn.commit()

@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Deep Earth & Artifact aesthetic */
+  --background: #0c0b0a;
+  --foreground: #F5F0E6;
+  --surface-glass: rgba(26, 22, 20, 0.75);
+  --surface-glass-light: rgba(45, 38, 33, 0.6);
+  --accent-glow: #D97757; /* Deep Terracotta */
+  --accent-ochre: #D4A373; /* Muted Gold / Ochre */
+  --text-body: rgba(245, 240, 230, 0.8);
+  --border-glass: rgba(217, 119, 87, 0.15);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-surface-glass: var(--surface-glass);
+  --color-surface-glass-light: var(--surface-glass-light);
+  --color-accent-glow: var(--accent-glow);
+  --color-accent-ochre: var(--accent-ochre);
+  --color-text-body: var(--text-body);
+  --color-border-glass: var(--border-glass);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  
+  /* Custom easing for sliding panels */
+  --ease-mechanical: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevent scrolling on the main view, the map takes over */
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background-color: var(--surface-glass);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 0.5px solid var(--border-glass);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.glass-panel-light {
+  background-color: var(--surface-glass-light);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid var(--border-glass);
 }
