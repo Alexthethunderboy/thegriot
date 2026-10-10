@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TheGriot
 
-## Getting Started
+An interactive geographic-history prototype for exploring places, time periods and historical narratives with Next.js, React and Deck.gl.
 
-First, run the development server:
+[Explore the prototype](https://thegriot.vercel.app/)
+
+![thegriot — existing portfolio capture](https://raw.githubusercontent.com/Alexthethunderboy/Portfolio/b4c8f605bdb311f2be00d14855b4914a3d662cf9/public/projects/previews/thegriot.webp)
+
+Existing portfolio capture, verified 8 October 2026; not evidence of current uptime or completed validation.
+
+## Prototype and authorization limits
+
+The tracked migration `supabase/migrations/20260613000002_disable_rls.sql` disables row-level security on clusters, epochs, entities, claims, edges and sources for the prototype phase. This is not a production authorization design. Hosted database policies were not inspected or changed. Before public data collection or production use, a separate authorization/security review and tested policies are required. Historical claims and extraction confidence also need source review; generated output is not historical certainty.
+
+## Frontend setup
 
 ```bash
+git clone https://github.com/Alexthethunderboy/thegriot.git
+cd thegriot
+npm ci
+# Create .env.local with development configuration
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The client reads `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. The search route optionally reads server-only `GEMINI_API_KEY`. Use an isolated development dataset and do not commit credentials. Inspect the schema and migration dependencies before preparing a database; this guide does not assert a verified clean bootstrap.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The entry page is `src/app/page.tsx`. `npm run lint` and `npm run build` exist, but were not run for this documentation update. A useful manual check is map loading → search → detail/source inspection → contribution authorization boundaries. No first-party automated test suite or Actions workflow is currently tracked.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Optional ingestion
 
-## Learn More
+`pipeline/extract.py` reads `SUPABASE_DB_URL` and imports `psycopg2` and `google.generativeai`. No tracked Python dependency manifest exists. Extraction contains mock/default behavior, and Wikidata ingestion still describes pushing records as future work. Treat the pipeline as experimental/manual work, separate from frontend setup. Do not run it against a hosted database as a preview step.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Built by [Thunderboy](https://thunderboy.vercel.app).
